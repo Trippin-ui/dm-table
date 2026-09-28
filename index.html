@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   :root {
     --bg-deep: #14130f;
@@ -442,9 +443,75 @@
     .tools-tray { width: 100%; }
     .tool-box { flex: 1; width: auto; }
   }
+
+  /* --- Session Pages panel (left) --- */
+  :root { --panel-w: clamp(230px, 24vw, 340px); }
+  body.has-sessions { padding-left: var(--panel-w); }
+  body.has-sessions .battle-bar { left: var(--panel-w); }
+  .session-panel {
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--panel-w); z-index: 40;
+    background: var(--bg-panel); border-right: 1px solid var(--panel-line);
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  body:not(.has-sessions) .session-panel { display: none; }
+  .session-panel.dragover { box-shadow: inset 0 0 0 3px var(--amber); }
+  .session-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 16px 16px 12px; border-bottom: 1px solid var(--panel-line);
+  }
+  .session-head h2 {
+    font-family: 'Cinzel', serif; font-weight: 700; font-size: 14px;
+    letter-spacing: 0.18em; text-transform: uppercase; margin: 0; color: var(--parchment);
+  }
+  .session-head button { font-size: 11px; padding: 4px 9px; }
+  .session-list {
+    flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .session-empty {
+    margin: auto; text-align: center; color: var(--parchment-dim); font-size: 13px;
+    border: 1px dashed var(--panel-line); border-radius: 6px; padding: 30px 16px; width: 100%;
+  }
+  .session-page {
+    position: relative; border: 2px solid var(--panel-line); border-radius: 4px; overflow: hidden;
+    cursor: pointer; background: #fff; flex-shrink: 0;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .session-page img { width: 100%; display: block; }
+  .session-page:hover {
+    border-color: var(--amber); transform: scale(1.03);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.55);
+  }
+  .session-page .page-tag {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 8px; font-size: 11px;
+    background: rgba(20,19,15,0.8); color: var(--parchment);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session-status { font-size: 12px; color: var(--amber); text-align: center; padding: 0 16px 10px; }
+  .session-status:empty { display: none; }
+
+  .page-stage {
+    position: fixed; inset: 0; background: rgba(8,7,5,0.92); display: none;
+    align-items: center; justify-content: center; z-index: 80; padding: 24px; cursor: pointer;
+  }
+  .page-stage.open { display: flex; }
+  .page-stage img {
+    max-width: 94vw; max-height: 94vh; background: #fff; border-radius: 4px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7); cursor: default;
+  }
 </style>
 </head>
-<body>
+<body class="has-sessions">
+
+<aside class="session-panel" id="sessionPanel">
+  <div class="session-head">
+    <h2>Session Pages</h2>
+    <button id="clearPages" class="ghost" type="button">Clear</button>
+  </div>
+  <div class="session-status" id="sessionStatus"></div>
+  <div class="session-list" id="sessionList"></div>
+</aside>
+<div class="page-stage" id="pageStage"><img id="pageStageImg" src="" alt=""></div>
 
 <header>
   <div class="header-inner">
@@ -1691,9 +1758,131 @@
     renderPlayers();
   })();
 
+
+  /* ---------- Session pages (PDF drop panel) ---------- */
+  const sessionPanel = document.getElementById('sessionPanel');
+  const sessionList = document.getElementById('sessionList');
+  const sessionStatus = document.getElementById('sessionStatus');
+  const pageStage = document.getElementById('pageStage');
+  const pageStageImg = document.getElementById('pageStageImg');
+  const clearPagesBtn = document.getElementById('clearPages');
+  let sessionPages = [];
+  let nextPageId = 1;
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  function renderSessionPages() {
+    sessionList.innerHTML = '';
+    if (!sessionPages.length) {
+      const empty = document.createElement('div');
+      empty.className = 'session-empty';
+      empty.textContent = 'Drag & drop session plan PDFs here';
+      sessionList.appendChild(empty);
+      return;
+    }
+    sessionPages.forEach(pg => {
+      const el = document.createElement('div');
+      el.className = 'session-page';
+      const img = document.createElement('img');
+      img.src = pg.dataUrl;
+      img.alt = pg.name + ' page ' + pg.pageNum;
+      const tag = document.createElement('div');
+      tag.className = 'page-tag';
+      tag.textContent = pg.name + ' · p' + pg.pageNum;
+      el.appendChild(img);
+      el.appendChild(tag);
+      el.addEventListener('click', () => {
+        pageStageImg.src = pg.dataUrl;
+        pageStage.classList.add('open');
+      });
+      sessionList.appendChild(el);
+    });
+  }
+
+  async function addPdfs(fileList) {
+    const pdfs = [...fileList].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) return;
+    if (!window.pdfjsLib) { sessionStatus.textContent = 'PDF reader failed to load — check your connection.'; return; }
+    for (const file of pdfs) {
+      try {
+        sessionStatus.textContent = 'Reading ' + file.name + '…';
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const baseName = file.name.replace(/\.pdf$/i, '');
+        for (let n = 1; n <= pdf.numPages; n++) {
+          sessionStatus.textContent = 'Reading ' + file.name + ' — page ' + n + ' of ' + pdf.numPages;
+          const page = await pdf.getPage(n);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          sessionPages.push({ id: nextPageId++, name: baseName, pageNum: n, dataUrl: canvas.toDataURL('image/jpeg', 0.85) });
+          renderSessionPages();
+        }
+        await idbSet('sessionPages', sessionPages);
+      } catch (e) {
+        console.error('PDF load failed', e);
+        sessionStatus.textContent = 'Could not read ' + file.name;
+        return;
+      }
+    }
+    sessionStatus.textContent = '';
+  }
+
+  ['dragenter', 'dragover'].forEach(evt => sessionPanel.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation();
+    sessionPanel.classList.add('dragover');
+  }));
+  sessionPanel.addEventListener('dragleave', e => {
+    if (!sessionPanel.contains(e.relatedTarget)) sessionPanel.classList.remove('dragover');
+  });
+  sessionPanel.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    sessionPanel.classList.remove('dragover');
+    dropZone.classList.remove('dragover');
+    addPdfs(e.dataTransfer.files);
+  });
+
+  let clearPagesArmed = false, clearPagesTimer = null;
+  clearPagesBtn.addEventListener('click', async () => {
+    if (!sessionPages.length) return;
+    if (!clearPagesArmed) {
+      clearPagesArmed = true;
+      clearPagesBtn.textContent = 'Sure?';
+      clearPagesTimer = setTimeout(() => { clearPagesArmed = false; clearPagesBtn.textContent = 'Clear'; }, 3000);
+      return;
+    }
+    clearTimeout(clearPagesTimer);
+    clearPagesArmed = false;
+    clearPagesBtn.textContent = 'Clear';
+    sessionPages = [];
+    renderSessionPages();
+    await idbSet('sessionPages', sessionPages);
+  });
+
+  /* click the background to return to the main screen */
+  pageStage.addEventListener('click', e => { if (e.target === pageStage) pageStage.classList.remove('open'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') pageStage.classList.remove('open'); });
+
+  (async function initSessionPages() {
+    const saved = await idbGet('sessionPages');
+    if (Array.isArray(saved)) {
+      sessionPages = saved;
+      nextPageId = Math.max(0, ...saved.map(x => x.id || 0)) + 1;
+    }
+    renderSessionPages();
+  })();
+
   /* ---------- Shared-table capabilities: owner controls vs guest view ---------- */
   function applyRoleUI() {
     document.getElementById('roleBadge').textContent = isOwner ? 'Game Master' : 'Player view';
+    document.body.classList.toggle('has-sessions', isOwner);
     document.getElementById('tabsNav').style.display = isOwner ? 'flex' : 'none';
     document.getElementById('playersToolbar').style.display = 'none';
     if (!isOwner) {
