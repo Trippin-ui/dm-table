@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Dungeon Master's Table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Spectral:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --bg-deep: #14130f;
+    --bg-panel: #1d1b15;
+    --panel-line: #35311f;
+    --moss: #3f6b4a;
+    --moss-dim: #2b4a34;
+    --parchment: #ece3cf;
+    --parchment-dim: #b8ae94;
+    --amber: #c9973b;
+    --rust: #8a3324;
+    box-sizing: border-box;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg-deep);
+    background-image:
+      radial-gradient(circle at 20% -10%, rgba(63,107,74,0.18), transparent 45%),
+      radial-gradient(circle at 90% 110%, rgba(138,51,36,0.14), transparent 50%);
+    color: var(--parchment);
+    font-family: 'Spectral', serif;
+    min-height: 100%;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  header { padding: clamp(22px, 4vw, 40px) clamp(20px, 5vw, 56px) 0; }
+  .header-inner {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 24px; flex-wrap: wrap; max-width: 1400px; margin: 0 auto;
+  }
+
+  /* --- Game board (top middle) --- */
+  .board-area { flex: 1; min-width: 0; }
+  .board-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .board-head .role-badge { margin-bottom: 0; }
+  .board-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+  .board-buttons button, .board-buttons .file-btn { padding: 6px 12px; font-size: 13px; }
+  .board-frame {
+    height: clamp(240px, 38vh, 420px); background: rgba(0,0,0,0.25);
+    border: 1px solid var(--panel-line); border-radius: 8px; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .board-frame.dragover { border-color: var(--amber); box-shadow: inset 0 0 0 2px var(--amber); }
+  .board-stage { position: relative; flex-shrink: 0; background-size: 100% 100%; background-repeat: no-repeat; }
+  .board-stage:not(.has-image) { border: 1px dashed var(--panel-line); }
+  .board-hint {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; text-align: center; color: var(--parchment-dim); font-size: 14px; pointer-events: none;
+  }
+  .board-hint small { font-size: 12px; opacity: 0.8; }
+  .sprite { position: absolute; cursor: grab; touch-action: none; user-select: none; }
+  .sprite.dragging { cursor: grabbing; }
+  .sprite img { width: 100%; display: block; pointer-events: none; -webkit-user-drag: none; }
+  .sprite:hover { outline: 1px dashed var(--amber); }
+  .sprite-x {
+    position: absolute; top: -9px; right: -9px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--rust); color: #fff; border: none; padding: 0; font-size: 11px; line-height: 18px; display: none;
+  }
+  .sprite-handle {
+    position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px; display: none;
+    background: var(--amber); border: 1px solid #2a1f08; border-radius: 2px; cursor: nwse-resize;
+  }
+  .sprite:hover .sprite-x, .sprite:hover .sprite-handle { display: block; }
+  body.is-guest .sprite { cursor: default; }
+  body.is-guest .sprite-x, body.is-guest .sprite-handle, body.is-guest .board-buttons { display: none !important; }
+  @media (max-width: 700px) { .board-area { width: 100%; flex: none; } }
+
+  nav.tabs { display: flex; gap: 4px; padding: 0 clamp(20px, 5vw, 56px); border-bottom: 1px solid var(--panel-line); justify-content: center; }
+  nav.tabs .tabs-inner { display: flex; gap: 4px; max-width: 1400px; width: 100%; }
+  nav.tabs button {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--parchment-dim); font-family: 'Cinzel', serif; font-size: 14px;
+    letter-spacing: 0.03em; padding: 12px 6px; margin-right: 22px; cursor: pointer;
+  }
+  nav.tabs button.active { color: var(--parchment); border-bottom-color: var(--amber); }
+
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+    padding: 16px clamp(20px, 5vw, 56px); border-bottom: 1px solid var(--panel-line); background: var(--bg-panel);
+  }
+  .toolbar-inner { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; max-width: 1400px; width: 100%; }
+  .toolbar .spacer { flex: 1 1 auto; }
+
+  button, .file-btn {
+    font-family: 'Spectral', serif; font-size: 14px; color: var(--parchment);
+    background: var(--moss-dim); border: 1px solid var(--moss); border-radius: 3px;
+    padding: 9px 16px; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease;
+  }
+  button:hover, .file-btn:hover { background: var(--moss); }
+  button:active, .file-btn:active { transform: translateY(1px); }
+  button.danger { background: transparent; border-color: var(--rust); color: #d99b8c; }
+  button.danger:hover { background: rgba(138,51,36,0.25); }
+  button.ghost { background: transparent; border-color: var(--panel-line); }
+  button.ghost:hover { background: var(--panel-line); }
+  .file-btn { display: inline-block; position: relative; overflow: hidden; }
+  .file-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .count { color: var(--parchment-dim); font-size: 13px; letter-spacing: 0.02em; }
+
+  main { padding: clamp(20px, 5vw, 56px); position: relative; min-height: 60vh; max-width: 1400px; margin: 0 auto; padding-bottom: 260px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* --- The Table (card reveal) --- */
+  .empty {
+    border: 1px dashed var(--panel-line); border-radius: 6px; padding: 60px 20px;
+    text-align: center; color: var(--parchment-dim); max-width: 520px; margin: 40px auto;
+  }
+  .empty.dragover { border-color: var(--amber); color: var(--parchment); }
+  .empty h2 { font-family: 'Cinzel', serif; font-size: 18px; color: var(--parchment); margin: 0 0 8px; font-weight: 500; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 18px;
+  }
+  .card { perspective: 1200px; aspect-ratio: 5 / 7; cursor: pointer; }
+  .card-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(.4,.2,.2,1); }
+  .card.flipped .card-inner { transform: rotateY(180deg); }
+  .face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 8px; overflow: hidden; border: 1px solid var(--panel-line); box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
+  .face.back { background: var(--moss-dim); display: flex; align-items: center; justify-content: center; }
+  .face.back span { font-family: 'Cinzel', serif; font-size: 40px; color: var(--parchment); opacity: 0.85; }
+  .card.armed .face.back { background: var(--moss); box-shadow: inset 0 0 0 3px var(--amber); }
+  .card.armed .face.back span { font-size: 18px; color: var(--amber); opacity: 1; }
+  .card.drag-over .card-inner { outline: 3px solid var(--amber); outline-offset: 2px; border-radius: 8px; }
+  .add-to-player-btn {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,19,15,0.85); border: 1px solid var(--amber); color: var(--parchment);
+    font-size: 11px; padding: 4px 9px; border-radius: 4px; cursor: pointer;
+    opacity: 0; transition: opacity 0.15s ease;
+  }
+  .card:hover .add-to-player-btn { opacity: 1; }
+
+  .assign-marker {
+    position: absolute; top: 6px; left: 6px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--amber); color: #2a1f08;
+    font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    z-index: 2;
+  }
+
+  .player-menu {
+    position: fixed; display: none; flex-direction: column;
+    background: var(--bg-panel); border: 1px solid var(--panel-line); border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 70; min-width: 180px; max-width: 220px;
+    max-height: 320px; overflow-y: auto; overflow-x: hidden;
+  }
+  .player-menu.open { display: flex; }
+  .player-menu-item {
+    background: none; border: none; text-align: left; color: var(--parchment);
+    padding: 8px 12px; font-size: 13px; cursor: pointer; font-family: 'Spectral', serif;
+  }
+  .player-menu-item:hover { background: var(--moss-dim); }
+  .player-menu-empty { padding: 10px 12px; font-size: 12px; color: var(--parchment-dim); }
+  .menu-section-label {
+    font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--parchment-dim); padding: 8px 12px 4px;
+  }
+  .menu-divider { height: 1px; background: var(--panel-line); margin: 4px 0; }
+  .face.front { transform: rotateY(180deg); background: #0c0b08; }
+  .face.front img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card:hover .card-inner { transform: translateY(-3px) rotateY(0deg); }
+  .card.flipped:hover .card-inner { transform: translateY(-3px) rotateY(180deg); }
+
+  .spotlight { position: fixed; inset: 0; background: rgba(8,7,5,0.9); display: none; align-items: center; justify-content: center; z-index: 60; padding: 40px; }
+  .spotlight.open { display: flex; }
+  .spotlight img { max-width: min(80vw, 520px); max-height: 85vh; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .spotlight-hint { position: absolute; bottom: env(safe-area-inset-bottom, 24px); color: var(--parchment-dim); font-size: 13px; }
+
+  /* --- Dice, coin & effectiveness tools --- */
+  .tools-tray {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .tool-box {
+    width: 148px;
+    background: var(--bg-panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  }
+  .tool-box h3 {
+    font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.08em;
+    color: var(--parchment-dim); margin: 0 0 10px; font-weight: 500; text-align: center;
+  }
+  .dice-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+  .dice-buttons button { padding: 7px 0; font-size: 13px; text-align: center; }
+  .dice-buttons button.selected { background: var(--moss); border-color: var(--amber); }
+
+  .die-display, .coin-display { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .die-face {
+    width: 74px; height: 74px;
+    background: linear-gradient(160deg, var(--moss) 0%, var(--moss-dim) 100%);
+    border: 2px solid var(--amber);
+    border-radius: 14px;
+    clip-path: none;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cinzel', serif; font-size: 24px; font-weight: 700; color: var(--parchment);
+    cursor: pointer;
+    transition: clip-path 0.15s ease, border-radius 0.15s ease, transform 0.1s ease;
+    user-select: none;
+  }
+  .die-face:hover { transform: scale(1.05); }
+  .die-face.shape-d4 { clip-path: polygon(50% 3%, 3% 97%, 97% 97%); border-radius: 4px; padding-top: 12px; }
+  .die-face.shape-d6 { clip-path: none; border-radius: 14px; }
+  .die-face.shape-d8 { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); border-radius: 2px; }
+  .die-face.shape-d20 { clip-path: none; border-radius: 50%; }
+  .die-face.rolling { animation: diceSpin 0.3s linear infinite; }
+  .die-face.landed { animation: diceLand 0.25s ease; }
+  @keyframes diceSpin {
+    0%   { transform: rotate(0deg) translate(0,0) scale(1); }
+    25%  { transform: rotate(90deg) translate(-2px, 1px) scale(1.06); }
+    50%  { transform: rotate(180deg) translate(2px, -1px) scale(1.1); }
+    75%  { transform: rotate(270deg) translate(-1px, 2px) scale(1.06); }
+    100% { transform: rotate(360deg) translate(0,0) scale(1); }
+  }
+  @keyframes diceLand {
+    0%   { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+  .die-sub, .coin-sub { font-size: 11px; color: var(--parchment-dim); }
+
+  .effect-buttons { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .eff-btn { font-size: 12px; padding: 7px 0; text-align: center; }
+  .eff-btn[data-mod="4"].selected { background: var(--moss); border-color: #6fbf7a; }
+  .eff-btn[data-mod="-2"].selected { background: #6b5a1f; border-color: var(--amber); }
+  .eff-btn[data-mod="-4"].selected { background: rgba(138,51,36,0.5); border-color: var(--rust); }
+  .effect-current { font-size: 11px; color: var(--parchment-dim); text-align: center; }
+
+  /* --- Card status effects --- */
+  .card-actions {
+    position: absolute; bottom: 6px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 6px;
+    opacity: 0; transition: opacity 0.15s ease;
+  }
+  .card:hover .card-actions { opacity: 1; }
+  .card-actions button {
+    background: rgba(20,19,15,0.85); border: 1px solid var(--amber); color: var(--parchment);
+    font-size: 10px; padding: 4px 7px; border-radius: 4px; cursor: pointer;
+  }
+  .status-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-family: 'Cinzel', serif; font-weight: 700; font-size: 16px; letter-spacing: 0.05em;
+    color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,0.85); text-align: center; pointer-events: none;
+  }
+  .status-overlay.status-fainted { background: rgba(130,130,130,0.6); }
+  .status-overlay.status-dead { background: rgba(139,0,0,0.55); }
+  .status-overlay.status-poisoned { background: rgba(120,20,150,0.55); }
+
+  /* --- Dice box (bottom-right corner) --- */
+  .dice-box {
+    position: fixed; right: 20px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); z-index: 30;
+    width: 220px; background: var(--bg-panel); border: 1px solid var(--panel-line);
+    border-radius: 10px; padding: 12px 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center;
+  }
+  .dice-box h3 {
+    font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--parchment-dim); margin: 0 0 10px; font-weight: 500;
+  }
+  .dice-sides { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+  .dice-sides button { padding: 5px 0; width: 38px; font-size: 13px; }
+  .dice-sides button.selected { background: var(--moss); border-color: var(--amber); }
+  .dice-stage { height: 96px; display: flex; align-items: center; justify-content: center; }
+  .box-die {
+    position: relative; width: 96px; height: 96px; background: var(--amber);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cinzel', serif; font-size: 26px; font-weight: 700; color: var(--parchment);
+    cursor: pointer; user-select: none; transition: transform 0.1s ease;
+  }
+  .box-die::before {
+    content: ''; position: absolute; inset: 3px; clip-path: inherit;
+    background: linear-gradient(160deg, var(--moss) 0%, var(--moss-dim) 100%);
+  }
+  .box-die span { position: relative; z-index: 1; }
+  .box-die:hover { transform: scale(1.05); }
+  .box-die.shape-d4 { clip-path: polygon(50% 3%, 3% 97%, 97% 97%); }
+  .box-die.shape-d4 span { padding-top: 18px; }
+  .box-die.shape-d6 { clip-path: inset(0 round 16px); }
+  .box-die.shape-d8 { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+  .box-die.shape-d20 { width: 110px; clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); }
+  .box-die.rolling { animation: diceSpin 0.3s linear infinite; }
+  .box-die.landed { animation: diceLand 0.25s ease; }
+  .dice-sub { font-size: 12px; color: var(--parchment-dim); margin-top: 10px; min-height: 16px; }
+
+  /* --- Trade modal --- */
+  .trade-overlay { position: fixed; inset: 0; background: rgba(8,7,5,0.85); display: none; align-items: center; justify-content: center; z-index: 65; padding: 20px; }
+  .trade-overlay.open { display: flex; }
+  .trade-panel { background: var(--bg-panel); border: 1px solid var(--panel-line); border-radius: 10px; padding: 20px; width: min(640px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .trade-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .trade-header h3 { font-family: 'Cinzel', serif; font-size: 16px; margin: 0; color: var(--parchment); font-weight: 500; }
+  .trade-columns { display: flex; align-items: flex-start; gap: 14px; }
+  .trade-column { flex: 1; min-width: 0; }
+  .trade-arrow { font-size: 22px; color: var(--amber); padding-top: 34px; }
+  .trade-player-select {
+    width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--panel-line); border-radius: 4px;
+    color: var(--parchment); font-family: 'Spectral', serif; font-size: 14px; padding: 7px; margin-bottom: 10px;
+  }
+  .trade-mon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; min-height: 70px; }
+  .trade-mon-slot { aspect-ratio: 1; border: 1.5px solid var(--panel-line); border-radius: 6px; overflow: hidden; cursor: pointer; position: relative; }
+  .trade-mon-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .trade-mon-slot.selected { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber) inset; }
+  .trade-mon-empty { grid-column: span 3; color: var(--parchment-dim); font-size: 12px; text-align: center; padding: 18px 0; }
+  .trade-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+  .trade-hint { font-size: 12px; color: var(--parchment-dim); flex: 1; }
+
+  .coin-face {
+    width: 74px; height: 74px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #e8c874, var(--amber) 55%, #8a6b23 100%);
+    border: 2px solid #8a6b23;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; color: #3a2c0c;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: transform 0.1s ease;
+    user-select: none;
+  }
+  .coin-face:hover { transform: scale(1.05); }
+  .coin-face.flipping { animation: coinFlip 0.12s linear infinite; }
+  .coin-face.landed { animation: coinLand 0.25s ease; }
+  @keyframes coinFlip {
+    0%   { transform: rotateY(0deg) scaleX(1); }
+    50%  { transform: rotateY(180deg) scaleX(0.15); }
+    100% { transform: rotateY(360deg) scaleX(1); }
+  }
+  @keyframes coinLand {
+    0%   { transform: scale(1.25); }
+    100% { transform: scale(1); }
+  }
+
+  /* --- Players --- */
+  .players-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 22px; }
+  .player-panel { background: var(--bg-panel); border: 1px solid var(--panel-line); border-radius: 8px; padding: 18px; position: relative; }
+  .player-panel .remove-player { position: absolute; top: 12px; right: 12px; font-size: 12px; padding: 5px 10px; }
+  .field-label { font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 0.06em; color: var(--parchment-dim); display: block; margin: 0 0 6px; }
+  .name-input {
+    width: calc(100% - 90px); background: transparent; border: none; border-bottom: 1px solid var(--panel-line);
+    color: var(--parchment); font-family: 'Cinzel', serif; font-size: 20px; padding: 4px 2px 8px; margin-bottom: 16px;
+  }
+  .name-input:focus, .name-input:hover { outline: none; border-bottom-color: var(--amber); }
+  .name-input::placeholder { color: var(--parchment-dim); opacity: 0.6; }
+
+  .money-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 16px;
+  }
+  .money-row .currency { font-family: 'Cinzel', serif; font-size: 16px; color: var(--amber); }
+  .money-input {
+    width: 90px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--panel-line);
+    border-radius: 4px;
+    color: var(--parchment);
+    font-family: 'Spectral', serif;
+    font-size: 14px;
+    padding: 6px 8px;
+  }
+  .money-input:focus { outline: none; border-color: var(--amber); }
+
+  .player-body { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 480px) { .player-body { grid-template-columns: 1fr; } }
+
+  textarea.inventory {
+    width: 100%; min-height: 150px; resize: vertical; background: rgba(0,0,0,0.2);
+    border: 1px solid var(--panel-line); border-radius: 4px; color: var(--parchment);
+    font-family: 'Spectral', serif; font-size: 14px; padding: 10px;
+  }
+  textarea.inventory:focus { outline: none; border-color: var(--amber); }
+
+  .mon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mon-slot {
+    aspect-ratio: 1; border: 1.5px dashed var(--panel-line); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; position: relative;
+    cursor: pointer; color: var(--parchment-dim); font-size: 22px; overflow: hidden; background: rgba(0,0,0,0.15);
+  }
+  .mon-slot.dragover { border-color: var(--amber); color: var(--amber); }
+  .mon-slot.filled { border-style: solid; border-color: var(--panel-line); }
+  .mon-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mon-slot .clear-mon {
+    position: absolute; top: 2px; right: 2px; background: rgba(8,7,5,0.75); color: var(--parchment);
+    border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; line-height: 1;
+    cursor: pointer; display: none;
+  }
+  .mon-slot.filled:hover .clear-mon { display: block; }
+  .mon-slot input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .no-players { color: var(--parchment-dim); text-align: center; padding: 60px 20px; }
+  .save-hint { font-size: 12px; color: var(--parchment-dim); }
+
+  .role-badge {
+    display: inline-block;
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    margin-bottom: 14px;
+  }
+  .waiting-note { font-size: 13px; color: var(--parchment-dim); margin-top: 6px; }
+
+  @media (max-width: 700px) {
+    .grid { padding-bottom: 20px; }
+    .header-inner { flex-direction: column; }
+    .tools-tray { width: 100%; }
+    .tool-box { flex: 1; width: auto; }
+  }
+
+  /* --- Session Pages panel (left) --- */
+  :root { --panel-w: clamp(320px, 34vw, 620px); }
+  body.has-sessions { padding-left: var(--panel-w); }
+  .session-panel {
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--panel-w); z-index: 40;
+    background: var(--bg-panel); border-right: 1px solid var(--panel-line);
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  body:not(.has-sessions) .session-panel { display: none; }
+  .session-panel.dragover { box-shadow: inset 0 0 0 3px var(--amber); }
+  .session-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 16px 16px 12px; border-bottom: 1px solid var(--panel-line);
+  }
+  .session-head h2 {
+    font-family: 'Cinzel', serif; font-weight: 700; font-size: 14px;
+    letter-spacing: 0.18em; text-transform: uppercase; margin: 0; color: var(--parchment);
+  }
+  .session-head button { font-size: 11px; padding: 4px 9px; }
+  .session-list {
+    flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .session-empty {
+    margin: auto; text-align: center; color: var(--parchment-dim); font-size: 13px;
+    border: 1px dashed var(--panel-line); border-radius: 6px; padding: 30px 16px; width: 100%;
+  }
+  .session-page {
+    position: relative; border: 2px solid var(--panel-line); border-radius: 4px; overflow: hidden;
+    cursor: pointer; background: #fff; flex-shrink: 0;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .session-page img { width: 100%; display: block; }
+  .session-page:hover {
+    border-color: var(--amber); transform: scale(1.03);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.55);
+  }
+  .session-page .page-tag {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 8px; font-size: 11px;
+    background: rgba(20,19,15,0.8); color: var(--parchment);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session-status { font-size: 12px; color: var(--amber); text-align: center; padding: 0 16px 10px; }
+  .session-status:empty { display: none; }
+
+  .page-stage {
+    position: fixed; inset: 0; background: rgba(8,7,5,0.92); display: none;
+    align-items: center; justify-content: center; z-index: 80; padding: 24px; cursor: pointer;
+  }
+  .page-stage.open { display: flex; }
+  .page-stage img {
+    max-width: 94vw; max-height: 94vh; background: #fff; border-radius: 4px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7); cursor: default;
+  }
+</style>
+</head>
+<body class="has-sessions">
+
+<aside class="session-panel" id="sessionPanel">
+  <div class="session-head">
+    <h2>Session Pages</h2>
+    <button id="clearPages" class="ghost" type="button">Clear</button>
+  </div>
+  <div class="session-status" id="sessionStatus"></div>
+  <div class="session-list" id="sessionList"></div>
+</aside>
+<div class="page-stage" id="pageStage"><img id="pageStageImg" src="" alt=""></div>
+
+<header>
+  <div class="header-inner">
+    <div class="board-area">
+      <div class="board-head">
+        <span class="role-badge" id="roleBadge">Game Master</span>
+        <div class="board-buttons" id="boardButtons">
+          <label class="file-btn"><span id="loadBoardLabel">Load Board</span>
+            <input type="file" id="loadBoardInput" accept=".json,application/json">
+          </label>
+          <button id="saveBoard" type="button">Save Board</button>
+          <button id="clearBoard" class="danger" type="button">Clear board</button>
+        </div>
+      </div>
+      <div class="board-frame" id="boardFrame">
+        <div class="board-stage" id="boardStage">
+          <div class="board-hint" id="boardHint">Drop a board image here<small>Drop GIFs onto it to place sprites</small></div>
+        </div>
+      </div>
+    </div>
+    <div class="tools-tray">
+      <div class="tool-box coin-box">
+        <h3>Coin Flip</h3>
+        <div class="coin-display">
+          <div class="coin-face" id="coinFace">?</div>
+          <div class="coin-sub" id="coinSub">Click to flip</div>
+        </div>
+      </div>
+
+      <div class="tool-box effect-box">
+        <h3>Effectiveness</h3>
+        <div class="effect-buttons">
+          <button class="eff-btn" data-mod="4" type="button">+4 Super</button>
+          <button class="eff-btn" data-mod="-2" type="button">-2 Weak</button>
+          <button class="eff-btn" data-mod="-4" type="button">-4 None</button>
+        </div>
+        <div class="effect-current" id="effectCurrent">No modifier</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" id="tabsNav">
+  <div class="tabs-inner">
+    <button id="tabTable" class="active">The Table</button>
+    <button id="tabPlayers">Player Profiles</button>
+  </div>
+</nav>
+
+<div class="toolbar" id="tableToolbar">
+  <div class="toolbar-inner">
+    <label class="file-btn">Load cards
+      <input type="file" id="fileInput" accept="image/*" multiple>
+    </label>
+    <button id="revealAll">Reveal all</button>
+    <button id="hideAll">Hide all</button>
+    <button id="shuffle">Shuffle order</button>
+    <button id="clearAll" class="danger">Clear cards</button>
+    <div class="spacer"></div>
+    <div class="count" id="count">0 cards on the table</div>
+  </div>
+</div>
+
+<div class="toolbar" id="playersToolbar" style="display:none;">
+  <div class="toolbar-inner">
+    <button id="addPlayer">+ Add player</button>
+    <button id="startTrade">Start Trade</button>
+    <div class="spacer"></div>
+    <div class="save-hint" id="saveHint">Changes save automatically on this device</div>
+  </div>
+</div>
+
+<main>
+  <section id="tableView" class="view active">
+    <div class="empty" id="dropZone">
+      <h2>No cards on the table yet</h2>
+      <p id="dropZoneText">Drag image files here, or use "Load cards" above. Everything stays on your machine — nothing is uploaded anywhere.</p>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="playersView" class="view">
+    <div class="players-grid" id="playersGrid"></div>
+    <div class="no-players" id="noPlayers" style="display:none;">No players yet — add one to build their profile.</div>
+  </section>
+</main>
+
+<div class="dice-box" id="diceBox">
+  <h3>Dice Box</h3>
+  <div class="dice-sides" id="diceSides">
+    <button type="button" data-sides="4">4</button>
+    <button type="button" data-sides="6">6</button>
+    <button type="button" data-sides="8">8</button>
+    <button type="button" data-sides="20" class="selected">20</button>
+  </div>
+  <div class="dice-stage"><div class="box-die shape-d20" id="boxDie"><span id="boxDieNum">–</span></div></div>
+  <div class="dice-sub" id="boxDieSub">d20 — click to roll</div>
+</div>
+
+<div class="spotlight" id="spotlight">
+  <img id="spotlightImg" src="" alt="">
+  <div class="spotlight-hint">Click anywhere to close</div>
+</div>
+
+<div class="player-menu" id="playerMenu"></div>
+<div class="player-menu" id="cardMenu"></div>
+
+<div class="trade-overlay" id="tradeOverlay">
+  <div class="trade-panel">
+    <div class="trade-header">
+      <h3>Trade Pokémon</h3>
+      <button class="ghost" id="closeTrade" type="button">✕</button>
+    </div>
+    <div class="trade-columns">
+      <div class="trade-column">
+        <select class="trade-player-select" id="tradePlayerA"></select>
+        <div class="trade-mon-grid" id="tradeGridA"></div>
+      </div>
+      <div class="trade-arrow">⇄</div>
+      <div class="trade-column">
+        <select class="trade-player-select" id="tradePlayerB"></select>
+        <div class="trade-mon-grid" id="tradeGridB"></div>
+      </div>
+    </div>
+    <div class="trade-footer">
+      <div class="trade-hint" id="tradeHint">Pick one Pokémon from each side, or just one to give it away.</div>
+      <button id="confirmTrade">Swap</button>
+    </div>
+  </div>
+</div>
+
+<script id="table-state" type="application/json">[]</script>
+
+<script>
+  /* Snapshot the pristine page BEFORE any state mutation — this is what
+     gets republished (with just the card data swapped in) so a GM's
+     open tab, spotlight, or dice face never leaks into what others see. */
+  const basePageHTML = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+  /* ---------- Tabs ---------- */
+  const tabTable = document.getElementById('tabTable');
+  const tabPlayers = document.getElementById('tabPlayers');
+  const tableView = document.getElementById('tableView');
+  const playersView = document.getElementById('playersView');
+  const tableToolbar = document.getElementById('tableToolbar');
+  const playersToolbar = document.getElementById('playersToolbar');
+
+  function showTab(which) {
+    const table = which === 'table';
+    tabTable.classList.toggle('active', table);
+    tabPlayers.classList.toggle('active', !table);
+    tableView.classList.toggle('active', table);
+    playersView.classList.toggle('active', !table);
+    tableToolbar.style.display = table ? 'flex' : 'none';
+    playersToolbar.style.display = table ? 'none' : 'flex';
+  }
+  tabTable.addEventListener('click', () => showTab('table'));
+  tabPlayers.addEventListener('click', () => showTab('players'));
+
+  /* ---------- IndexedDB helper ---------- */
+  const DB_NAME = 'handlers-table-db';
+  const STORE = 'kv';
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbGet(key) {
+    try {
+      const db = await openDB();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (e) { console.error('idbGet failed', e); return undefined; }
+  }
+  async function idbSet(key, value) {
+    try {
+      const db = await openDB();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch (e) { console.error('idbSet failed', e); }
+  }
+
+  /* ---------- Card reveal ---------- */
+  const grid = document.getElementById('grid');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const countEl = document.getElementById('count');
+  const spotlight = document.getElementById('spotlight');
+  const spotlightImg = document.getElementById('spotlightImg');
+
+  let cards = [];
+  let nextCardId = 1;
+  let isOwner = true;           // default true so the page works standalone/in preview
+  let artifactCap = null;
+  let roomCap = null;
+  let publishTimer = null;
+
+  function loadInitialCards() {
+    const tag = document.getElementById('table-state');
+    if (!tag || !tag.textContent.trim()) return;
+    try {
+      const parsed = JSON.parse(tag.textContent);
+      if (Array.isArray(parsed)) {
+        cards = parsed.map((c, i) => ({ id: i + 1, dataUrl: c.dataUrl, revealed: !!c.revealed }));
+        nextCardId = cards.length + 1;
+      }
+    } catch (e) { /* ignore malformed state */ }
+  }
+
+  function buildPublishHTML() {
+    const json = JSON.stringify(cards.map(c => ({ dataUrl: c.dataUrl, revealed: c.revealed })));
+    return basePageHTML.replace(
+      /<script id="table-state" type="application\/json">[\s\S]*?<\/script>/,
+      '<script id="table-state" type="application/json">' + json + '<\/script>'
+    );
+  }
+
+  function queuePublish() {
+    if (!isOwner || !artifactCap) return;
+    clearTimeout(publishTimer);
+    publishTimer = setTimeout(async () => {
+      try { await artifactCap.publish(buildPublishHTML()); }
+      catch (e) { console.error('publish failed', e); }
+    }, 350);
+  }
+
+  function playerInitial(playerId) {
+    const p = players.find(pl => pl.id === playerId);
+    if (!p) return null;
+    const n = p.name.trim();
+    return n ? n[0].toUpperCase() : '?';
+  }
+
+  function renderCards() {
+    grid.innerHTML = '';
+    dropZone.style.display = cards.length ? 'none' : 'block';
+    countEl.textContent = cards.length + (cards.length === 1 ? ' card on the table' : ' cards on the table');
+
+    cards.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'card' + (c.revealed ? ' flipped' : '');
+      const marker = c.assignedPlayerId ? '<div class="assign-marker">' + playerInitial(c.assignedPlayerId) + '</div>' : '';
+      const statusOverlay = c.status ? '<div class="status-overlay status-' + c.status + '">' + c.status.toUpperCase() + '</div>' : '';
+      card.innerHTML =
+        '<div class="card-inner">' +
+          '<div class="face back">' + (isOwner ? marker : '') + '<span>?</span>' +
+            (isOwner ? '<button class="add-to-player-btn" type="button">+ Player</button>' : '') +
+          '</div>' +
+          '<div class="face front"><img src="' + c.dataUrl + '" alt="">' + statusOverlay +
+            (isOwner ?
+              '<div class="card-actions">' +
+                '<button class="card-actions-btn" type="button">Actions ▾</button>' +
+              '</div>'
+            : '') +
+          '</div>' +
+        '</div>';
+      card.addEventListener('click', () => {
+        if (c.revealed) {
+          spotlightImg.src = c.dataUrl;
+          spotlight.classList.add('open');
+        } else if (isOwner) {
+          if (!card.classList.contains('armed')) {
+            card.classList.add('armed');
+            const qMark = card.querySelector('.face.back span');
+            if (qMark) qMark.textContent = 'Reveal?';
+            clearTimeout(card._armTimer);
+            card._armTimer = setTimeout(() => {
+              card.classList.remove('armed');
+              if (qMark) qMark.textContent = '?';
+            }, 2500);
+            return;
+          }
+          clearTimeout(card._armTimer);
+          c.revealed = true;
+          if (c.assignedPlayerId) {
+            assignCardToPlayer(c.dataUrl, c.assignedPlayerId);
+            c.assignedPlayerId = null;
+          }
+          renderCards();
+          queuePublish();
+        }
+      });
+      if (isOwner) {
+        card.addEventListener('dragover', e => {
+          e.preventDefault();
+          card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('drop', e => {
+          e.preventDefault();
+          card.classList.remove('drag-over');
+          const data = e.dataTransfer.getData('text/plain');
+          if (!data || !data.startsWith('player:')) return;
+          const playerId = parseInt(data.split(':')[1], 10);
+          if (c.revealed) {
+            const outcome = assignCardToPlayer(c.dataUrl, playerId);
+            if (outcome === 'full') return;
+          } else {
+            c.assignedPlayerId = playerId;
+            renderCards();
+          }
+        });
+        const backAddBtn = card.querySelector('.face.back .add-to-player-btn');
+        if (backAddBtn) {
+          backAddBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            openPlayerMenu(backAddBtn, c);
+          });
+        }
+        const actionsBtn = card.querySelector('.card-actions-btn');
+        if (actionsBtn) {
+          actionsBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            openCardMenu(actionsBtn, c);
+          });
+        }
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  function addFiles(fileList) {
+    if (!isOwner) return;
+    [...fileList].filter(f => f.type.startsWith('image/')).forEach(f => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        cards.push({ id: nextCardId++, dataUrl: e.target.result, revealed: false, assignedPlayerId: null, status: null });
+        renderCards();
+        queuePublish();
+      };
+      reader.readAsDataURL(f);
+    });
+  }
+
+  fileInput.addEventListener('change', e => addFiles(e.target.files));
+
+  ['dragover'].forEach(evt => {
+    document.body.addEventListener(evt, e => {
+      e.preventDefault();
+      if (isOwner && tableView.classList.contains('active')) dropZone.classList.add('dragover');
+    });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    document.body.addEventListener(evt, () => dropZone.classList.remove('dragover'));
+  });
+  document.body.addEventListener('drop', e => {
+    e.preventDefault();
+    if (isOwner && tableView.classList.contains('active') && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+
+  document.getElementById('revealAll').addEventListener('click', () => {
+    if (!isOwner) return;
+    cards.forEach(c => c.revealed = true); renderCards(); queuePublish();
+  });
+  document.getElementById('hideAll').addEventListener('click', () => {
+    if (!isOwner) return;
+    cards.forEach(c => c.revealed = false); renderCards(); queuePublish();
+  });
+  document.getElementById('shuffle').addEventListener('click', () => {
+    if (!isOwner) return;
+    for (let i = cards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cards[i], cards[j]] = [cards[j], cards[i]];
+    }
+    renderCards();
+    queuePublish();
+  });
+
+  const clearBtn = document.getElementById('clearAll');
+  let clearArmed = false, clearTimer = null;
+  clearBtn.addEventListener('click', () => {
+    if (!isOwner || !cards.length) return;
+    if (!clearArmed) {
+      clearArmed = true;
+      clearBtn.textContent = 'Click again to confirm';
+      clearTimer = setTimeout(() => { clearArmed = false; clearBtn.textContent = 'Clear cards'; }, 3000);
+      return;
+    }
+    clearTimeout(clearTimer);
+    clearArmed = false;
+    clearBtn.textContent = 'Clear cards';
+    cards = [];
+    fileInput.value = '';
+    renderCards();
+    queuePublish();
+  });
+
+  spotlight.addEventListener('click', () => spotlight.classList.remove('open'));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') spotlight.classList.remove('open'); });
+
+  loadInitialCards();
+
+  /* ---------- Add revealed card to a player's team ---------- */
+  const playerMenu = document.getElementById('playerMenu');
+
+  function closePlayerMenu() { playerMenu.classList.remove('open'); }
+
+  function openPlayerMenu(btn, card) {
+    playerMenu.innerHTML = '';
+    if (!players.length) {
+      const empty = document.createElement('div');
+      empty.className = 'player-menu-empty';
+      empty.textContent = 'No players yet — add one first';
+      playerMenu.appendChild(empty);
+    } else {
+      players.forEach(p => {
+        const item = document.createElement('button');
+        item.className = 'player-menu-item';
+        item.type = 'button';
+        item.textContent = p.name.trim() || 'Unnamed player';
+        item.addEventListener('click', () => {
+          if (card.revealed) {
+            const outcome = assignCardToPlayer(card.dataUrl, p.id);
+            item.textContent = outcome === 'ok' ? 'Added ✓' : 'Team is full';
+          } else {
+            card.assignedPlayerId = p.id;
+            renderCards();
+            item.textContent = 'Will go to ' + (p.name.trim() || 'Unnamed player') + ' ✓';
+          }
+          setTimeout(closePlayerMenu, 500);
+        });
+        playerMenu.appendChild(item);
+      });
+    }
+    const rect = btn.getBoundingClientRect();
+    playerMenu.style.top = Math.min(rect.bottom + 6, window.innerHeight - 40) + 'px';
+    playerMenu.style.left = Math.min(rect.left, window.innerWidth - 180) + 'px';
+    playerMenu.classList.add('open');
+  }
+
+  function assignCardToPlayer(dataUrl, playerId) {
+    const player = players.find(p => p.id === playerId);
+    if (!player) return 'error';
+    const emptyIdx = player.pokemon.findIndex(x => !x);
+    if (emptyIdx === -1) return 'full';
+    player.pokemon[emptyIdx] = dataUrl;
+    renderPlayers();
+    queueSave();
+    return 'ok';
+  }
+
+  document.addEventListener('click', e => {
+    if (!playerMenu.contains(e.target) && !e.target.classList.contains('add-to-player-btn')) {
+      closePlayerMenu();
+    }
+  });
+
+  /* ---------- Unified card actions menu (add to player / status) ---------- */
+  const cardMenu = document.getElementById('cardMenu');
+  const STATUS_OPTIONS = [
+    { value: null, label: 'Clear status' },
+    { value: 'fainted', label: 'Fainted' },
+    { value: 'dead', label: 'Dead' },
+    { value: 'poisoned', label: 'Poisoned' }
+  ];
+
+  function closeCardMenu() { cardMenu.classList.remove('open'); }
+
+  function openCardMenu(btn, card) {
+    cardMenu.innerHTML = '';
+
+    const addLabel = document.createElement('div');
+    addLabel.className = 'menu-section-label';
+    addLabel.textContent = 'Add to player';
+    cardMenu.appendChild(addLabel);
+
+    if (!players.length) {
+      const empty = document.createElement('div');
+      empty.className = 'player-menu-empty';
+      empty.textContent = 'No players yet';
+      cardMenu.appendChild(empty);
+    } else {
+      players.forEach(p => {
+        const item = document.createElement('button');
+        item.className = 'player-menu-item';
+        item.type = 'button';
+        item.textContent = p.name.trim() || 'Unnamed player';
+        item.addEventListener('click', () => {
+          const outcome = assignCardToPlayer(card.dataUrl, p.id);
+          item.textContent = outcome === 'ok' ? 'Added ✓' : 'Team is full';
+          setTimeout(closeCardMenu, 500);
+        });
+        cardMenu.appendChild(item);
+      });
+    }
+
+    const divider1 = document.createElement('div');
+    divider1.className = 'menu-divider';
+    cardMenu.appendChild(divider1);
+
+    const statusLabel = document.createElement('div');
+    statusLabel.className = 'menu-section-label';
+    statusLabel.textContent = 'Status';
+    cardMenu.appendChild(statusLabel);
+
+    STATUS_OPTIONS.forEach(opt => {
+      const item = document.createElement('button');
+      item.className = 'player-menu-item';
+      item.type = 'button';
+      item.textContent = opt.label;
+      item.addEventListener('click', () => {
+        card.status = opt.value;
+        renderCards();
+        closeCardMenu();
+        queuePublish();
+      });
+      cardMenu.appendChild(item);
+    });
+
+    const rect = btn.getBoundingClientRect();
+    cardMenu.style.top = Math.min(rect.bottom + 6, window.innerHeight - 40) + 'px';
+    cardMenu.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+    cardMenu.classList.add('open');
+  }
+
+  document.addEventListener('click', e => {
+    if (!cardMenu.contains(e.target) && !e.target.classList.contains('card-actions-btn')) {
+      closeCardMenu();
+    }
+  });
+
+  /* ---------- Trade Pokémon between players ---------- */
+  const tradeOverlay = document.getElementById('tradeOverlay');
+  const tradePlayerA = document.getElementById('tradePlayerA');
+  const tradePlayerB = document.getElementById('tradePlayerB');
+  const tradeGridA = document.getElementById('tradeGridA');
+  const tradeGridB = document.getElementById('tradeGridB');
+  const tradeHint = document.getElementById('tradeHint');
+  let tradeSelectedA = null;
+  let tradeSelectedB = null;
+
+  function populateTradeSelects() {
+    [tradePlayerA, tradePlayerB].forEach(sel => {
+      const prevVal = sel.value;
+      sel.innerHTML = '';
+      players.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name.trim() || 'Unnamed player';
+        sel.appendChild(opt);
+      });
+      if (prevVal && players.some(p => String(p.id) === prevVal)) sel.value = prevVal;
+    });
+    if (players.length > 1 && tradePlayerA.value === tradePlayerB.value) {
+      tradePlayerB.selectedIndex = (tradePlayerA.selectedIndex + 1) % players.length;
+    }
+  }
+
+  function renderTradeGrid(gridEl, playerId, side) {
+    gridEl.innerHTML = '';
+    const player = players.find(p => p.id === parseInt(playerId, 10));
+    if (!player) return;
+    const filled = player.pokemon.map((url, idx) => ({ url, idx })).filter(x => x.url);
+    if (!filled.length) {
+      const empty = document.createElement('div');
+      empty.className = 'trade-mon-empty';
+      empty.textContent = 'No Pokémon yet';
+      gridEl.appendChild(empty);
+      return;
+    }
+    filled.forEach(({ url, idx }) => {
+      const slot = document.createElement('div');
+      slot.className = 'trade-mon-slot';
+      const selectedIdx = side === 'a' ? tradeSelectedA : tradeSelectedB;
+      if (selectedIdx === idx) slot.classList.add('selected');
+      const img = document.createElement('img');
+      img.src = url;
+      slot.appendChild(img);
+      slot.addEventListener('click', () => {
+        if (side === 'a') tradeSelectedA = (tradeSelectedA === idx) ? null : idx;
+        else tradeSelectedB = (tradeSelectedB === idx) ? null : idx;
+        refreshTradeGrids();
+      });
+      gridEl.appendChild(slot);
+    });
+  }
+
+  function refreshTradeGrids() {
+    renderTradeGrid(tradeGridA, tradePlayerA.value, 'a');
+    renderTradeGrid(tradeGridB, tradePlayerB.value, 'b');
+  }
+
+  function openTrade() {
+    tradeHint.textContent = players.length < 2
+      ? 'Add at least two players first.'
+      : 'Pick one Pokémon from each side, or just one to give it away.';
+    tradeSelectedA = null;
+    tradeSelectedB = null;
+    populateTradeSelects();
+    refreshTradeGrids();
+    tradeOverlay.classList.add('open');
+  }
+
+  function closeTrade() { tradeOverlay.classList.remove('open'); }
+
+  const startTradeBtn = document.getElementById('startTrade');
+  if (startTradeBtn) startTradeBtn.addEventListener('click', openTrade);
+  document.getElementById('closeTrade').addEventListener('click', closeTrade);
+  tradeOverlay.addEventListener('click', e => { if (e.target === tradeOverlay) closeTrade(); });
+  tradePlayerA.addEventListener('change', () => { tradeSelectedA = null; refreshTradeGrids(); });
+  tradePlayerB.addEventListener('change', () => { tradeSelectedB = null; refreshTradeGrids(); });
+
+  document.getElementById('confirmTrade').addEventListener('click', () => {
+    const playerA = players.find(p => p.id === parseInt(tradePlayerA.value, 10));
+    const playerB = players.find(p => p.id === parseInt(tradePlayerB.value, 10));
+    if (!playerA || !playerB || playerA === playerB) {
+      tradeHint.textContent = 'Pick two different players.';
+      return;
+    }
+    if (tradeSelectedA === null && tradeSelectedB === null) {
+      tradeHint.textContent = 'Select at least one Pokémon to trade.';
+      return;
+    }
+    const aUrl = tradeSelectedA !== null ? playerA.pokemon[tradeSelectedA] : null;
+    const bUrl = tradeSelectedB !== null ? playerB.pokemon[tradeSelectedB] : null;
+
+    if (aUrl !== null && bUrl !== null) {
+      playerA.pokemon[tradeSelectedA] = bUrl;
+      playerB.pokemon[tradeSelectedB] = aUrl;
+    } else if (aUrl !== null) {
+      const emptyIdx = playerB.pokemon.findIndex(x => !x);
+      if (emptyIdx === -1) { tradeHint.textContent = (playerB.name.trim() || 'That player') + "'s team is full."; return; }
+      playerB.pokemon[emptyIdx] = aUrl;
+      playerA.pokemon[tradeSelectedA] = null;
+    } else if (bUrl !== null) {
+      const emptyIdx = playerA.pokemon.findIndex(x => !x);
+      if (emptyIdx === -1) { tradeHint.textContent = (playerA.name.trim() || 'That player') + "'s team is full."; return; }
+      playerA.pokemon[emptyIdx] = bUrl;
+      playerB.pokemon[tradeSelectedB] = null;
+    }
+
+    tradeSelectedA = null;
+    tradeSelectedB = null;
+    renderPlayers();
+    queueSave();
+    refreshTradeGrids();
+    tradeHint.textContent = 'Trade complete!';
+  });
+
+  /* ---------- Shared audio + dice box ---------- */
+  let audioCtx = null;
+
+  function getAudioCtx() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+    }
+    return audioCtx;
+  }
+
+  function playTick() {
+    try {
+      const ctx = getAudioCtx();
+      const dur = 0.04 + Math.random() * 0.02;
+      const bufferSize = Math.floor(ctx.sampleRate * dur);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.5);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1000 + Math.random() * 2200;
+      filter.Q.value = 1.5 + Math.random();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.3 + Math.random() * 0.25;
+      noise.connect(filter).connect(gain).connect(ctx.destination);
+      noise.start();
+    } catch (e) { /* audio unavailable, fail silently */ }
+  }
+
+  function playWoodTick() {
+    try {
+      const ctx = getAudioCtx();
+      const dur = 0.05 + Math.random() * 0.03;
+      const bufferSize = Math.floor(ctx.sampleRate * dur);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.2);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 300 + Math.random() * 400;
+      filter.Q.value = 1.1 + Math.random() * 0.6;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.4 + Math.random() * 0.2;
+      noise.connect(filter).connect(gain).connect(ctx.destination);
+      noise.start();
+    } catch (e) { /* ignore */ }
+  }
+
+  function playWoodLand() {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(65, ctx.currentTime + 0.22);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+      playWoodTick();
+    } catch (e) { /* ignore */ }
+  }
+
+  function setupDiceBox() {
+    const die = document.getElementById('boxDie');
+    const num = document.getElementById('boxDieNum');
+    const sub = document.getElementById('boxDieSub');
+    const sideBtns = document.querySelectorAll('#diceSides button');
+    let rolling = false;
+    let sides = 20;
+
+    sideBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (rolling) return;
+        sides = parseInt(btn.dataset.sides, 10);
+        sideBtns.forEach(b => b.classList.toggle('selected', b === btn));
+        die.className = 'box-die shape-d' + sides;
+        num.textContent = '–';
+        sub.textContent = 'd' + sides + ' — click to roll';
+      });
+    });
+
+    die.addEventListener('click', () => {
+      if (rolling) return;
+      rolling = true;
+      die.className = 'box-die shape-d' + sides + ' rolling';
+      sub.textContent = 'Rolling…';
+      const delays = [55, 60, 70, 85, 105, 130, 160, 195, 235];
+      let i = 0;
+      function tick() {
+        num.textContent = String(Math.floor(Math.random() * sides) + 1);
+        playWoodTick();
+        i++;
+        if (i < delays.length) {
+          setTimeout(tick, delays[i]);
+        } else {
+          const finalVal = Math.floor(Math.random() * sides) + 1;
+          num.textContent = String(finalVal);
+          die.className = 'box-die shape-d' + sides + ' landed';
+          playWoodLand();
+          if (effectModifier) {
+            const sign = effectModifier > 0 ? '+' : '';
+            sub.textContent = 'd' + sides + ' → ' + finalVal + ' ' + sign + effectModifier + ' = ' + (finalVal + effectModifier);
+          } else {
+            sub.textContent = 'd' + sides + ' → ' + finalVal;
+          }
+          rolling = false;
+        }
+      }
+      tick();
+    });
+  }
+  setupDiceBox();
+
+  /* ---------- Effectiveness modifier ---------- */
+  let effectModifier = 0;
+  const effButtons = document.querySelectorAll('.eff-btn');
+  const effectCurrent = document.getElementById('effectCurrent');
+  const EFF_LABELS = { '4': 'Super Effective (+4)', '-2': 'Not Very Effective (-2)', '-4': 'No Effect (-4)' };
+
+  effButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mod = parseInt(btn.dataset.mod, 10);
+      if (effectModifier === mod) {
+        effectModifier = 0;
+        effButtons.forEach(b => b.classList.remove('selected'));
+        effectCurrent.textContent = 'No modifier';
+      } else {
+        effectModifier = mod;
+        effButtons.forEach(b => b.classList.toggle('selected', b === btn));
+        effectCurrent.textContent = EFF_LABELS[String(mod)] + ' active';
+      }
+    });
+  });
+
+  /* ---------- Coin flip ---------- */
+  const coinFace = document.getElementById('coinFace');
+  const coinSub = document.getElementById('coinSub');
+  let coinFlipping = false;
+
+  function playCoinTick() {
+    try {
+      const ctx = getAudioCtx();
+      const dur = 0.03;
+      const bufferSize = Math.floor(ctx.sampleRate * dur);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 2500 + Math.random() * 1500;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.18 + Math.random() * 0.1;
+      noise.connect(filter).connect(gain).connect(ctx.destination);
+      noise.start();
+    } catch (e) { /* ignore */ }
+  }
+
+  function playCoinLand() {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(900, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.22, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.16);
+    } catch (e) { /* ignore */ }
+  }
+
+  function flipCoin() {
+    if (coinFlipping) return;
+    coinFlipping = true;
+    coinFace.classList.remove('landed');
+    coinFace.classList.add('flipping');
+    coinSub.textContent = 'Flipping…';
+
+    const delays = [50, 55, 65, 80, 100, 125, 155];
+    let i = 0;
+
+    function tick() {
+      coinFace.textContent = Math.random() < 0.5 ? 'H' : 'T';
+      playCoinTick();
+      i++;
+      if (i < delays.length) {
+        setTimeout(tick, delays[i]);
+      } else {
+        const finalSide = Math.random() < 0.5 ? 'Heads' : 'Tails';
+        coinFace.textContent = finalSide === 'Heads' ? 'H' : 'T';
+        coinFace.classList.remove('flipping');
+        coinFace.classList.add('landed');
+        playCoinLand();
+        coinSub.textContent = finalSide;
+        coinFlipping = false;
+      }
+    }
+    tick();
+  }
+
+  coinFace.addEventListener('click', flipCoin);
+
+  /* ---------- Player profiles ---------- */
+  const playersGrid = document.getElementById('playersGrid');
+  const noPlayers = document.getElementById('noPlayers');
+  const saveHint = document.getElementById('saveHint');
+  const MON_SLOTS = 6;
+  let players = [];
+  let nextPlayerId = 1;
+  let saveTimer = null;
+
+  function newPlayer() {
+    return { id: nextPlayerId++, name: '', money: 20, inventory: '', pokemon: new Array(MON_SLOTS).fill(null), active: null };
+  }
+
+  function queueSave() {
+    saveHint.textContent = 'Saving…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      await idbSet('players', players);
+      saveHint.textContent = 'Changes save automatically on this device';
+    }, 400);
+  }
+
+  function renderPlayers() {
+    playersGrid.innerHTML = '';
+    noPlayers.style.display = players.length ? 'none' : 'block';
+
+    players.forEach(p => {
+      const panel = document.createElement('div');
+      panel.className = 'player-panel';
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'danger remove-player';
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', () => {
+        players = players.filter(x => x.id !== p.id);
+        renderPlayers();
+        queueSave();
+      });
+
+      const nameInput = document.createElement('input');
+      nameInput.className = 'name-input';
+      nameInput.placeholder = 'Player name';
+      nameInput.value = p.name;
+      nameInput.addEventListener('input', () => { p.name = nameInput.value; queueSave(); });
+
+      const moneyRow = document.createElement('div');
+      moneyRow.className = 'money-row';
+      const currencySpan = document.createElement('span');
+      currencySpan.className = 'currency';
+      currencySpan.textContent = '₽';
+      const moneyInput = document.createElement('input');
+      moneyInput.type = 'number';
+      moneyInput.className = 'money-input';
+      moneyInput.value = typeof p.money === 'number' ? p.money : 20;
+      moneyInput.addEventListener('input', () => {
+        const val = parseInt(moneyInput.value, 10);
+        p.money = isNaN(val) ? 0 : val;
+        queueSave();
+      });
+      moneyRow.appendChild(currencySpan);
+      moneyRow.appendChild(moneyInput);
+
+      const body = document.createElement('div');
+      body.className = 'player-body';
+
+      const invWrap = document.createElement('div');
+      const invLabel = document.createElement('span');
+      invLabel.className = 'field-label';
+      invLabel.textContent = 'Inventory';
+      const inv = document.createElement('textarea');
+      inv.className = 'inventory';
+      inv.placeholder = 'Potions, key items, gold...';
+      inv.value = p.inventory;
+      inv.addEventListener('input', () => { p.inventory = inv.value; queueSave(); });
+      invWrap.appendChild(invLabel);
+      invWrap.appendChild(inv);
+
+      const monWrap = document.createElement('div');
+      const monLabel = document.createElement('span');
+      monLabel.className = 'field-label';
+      monLabel.textContent = 'Pokémon';
+      const monGrid = document.createElement('div');
+      monGrid.className = 'mon-grid';
+
+      p.pokemon.forEach((dataUrl, idx) => {
+        const slot = document.createElement('div');
+        slot.className = 'mon-slot' + (dataUrl ? ' filled' : '');
+
+        if (dataUrl) {
+          const img = document.createElement('img');
+          img.src = dataUrl;
+          slot.appendChild(img);
+          const clearMonBtn = document.createElement('button');
+          clearMonBtn.className = 'clear-mon';
+          clearMonBtn.textContent = '×';
+          clearMonBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            p.pokemon[idx] = null;
+            renderPlayers();
+            queueSave();
+          });
+          slot.appendChild(clearMonBtn);
+        } else {
+          slot.textContent = '+';
+          const fileIn = document.createElement('input');
+          fileIn.type = 'file';
+          fileIn.accept = 'image/*';
+          fileIn.addEventListener('change', e => {
+            if (e.target.files[0]) loadMonImage(e.target.files[0], p, idx);
+          });
+          slot.appendChild(fileIn);
+        }
+
+        slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('dragover'); });
+        slot.addEventListener('dragleave', () => slot.classList.remove('dragover'));
+        slot.addEventListener('drop', e => {
+          e.preventDefault();
+          slot.classList.remove('dragover');
+          if (e.dataTransfer.files[0]) loadMonImage(e.dataTransfer.files[0], p, idx);
+        });
+
+        monGrid.appendChild(slot);
+      });
+
+      monWrap.appendChild(monLabel);
+      monWrap.appendChild(monGrid);
+      body.appendChild(invWrap);
+      body.appendChild(monWrap);
+
+      panel.appendChild(removeBtn);
+      panel.appendChild(nameInput);
+      panel.appendChild(moneyRow);
+      panel.appendChild(body);
+      playersGrid.appendChild(panel);
+    });
+
+  }
+
+  function loadMonImage(file, player, idx) {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      player.pokemon[idx] = e.target.result;
+      renderPlayers();
+      queueSave();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  document.getElementById('addPlayer').addEventListener('click', () => {
+    players.push(newPlayer());
+    renderPlayers();
+    queueSave();
+  });
+
+  (async function initPlayers() {
+    const saved = await idbGet('players');
+    if (Array.isArray(saved) && saved.length) {
+      players = saved;
+      players.forEach(p => {
+        if (typeof p.money !== 'number') p.money = 20;
+        if (typeof p.active === 'undefined') p.active = null;
+      });
+      nextPlayerId = Math.max(...saved.map(p => p.id || 0)) + 1;
+    }
+    renderPlayers();
+  })();
+
+
+  /* ---------- Session pages (PDF drop panel) ---------- */
+  const sessionPanel = document.getElementById('sessionPanel');
+  const sessionList = document.getElementById('sessionList');
+  const sessionStatus = document.getElementById('sessionStatus');
+  const pageStage = document.getElementById('pageStage');
+  const pageStageImg = document.getElementById('pageStageImg');
+  const clearPagesBtn = document.getElementById('clearPages');
+  let sessionPages = [];
+  let nextPageId = 1;
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  function renderSessionPages() {
+    sessionList.innerHTML = '';
+    if (!sessionPages.length) {
+      const empty = document.createElement('div');
+      empty.className = 'session-empty';
+      empty.textContent = 'Drag & drop session plan PDFs here';
+      sessionList.appendChild(empty);
+      return;
+    }
+    sessionPages.forEach(pg => {
+      const el = document.createElement('div');
+      el.className = 'session-page';
+      const img = document.createElement('img');
+      img.src = pg.dataUrl;
+      img.alt = pg.name + ' page ' + pg.pageNum;
+      const tag = document.createElement('div');
+      tag.className = 'page-tag';
+      tag.textContent = pg.name + ' · p' + pg.pageNum;
+      el.appendChild(img);
+      el.appendChild(tag);
+      el.addEventListener('click', () => {
+        pageStageImg.src = pg.dataUrl;
+        pageStage.classList.add('open');
+      });
+      sessionList.appendChild(el);
+    });
+  }
+
+  async function addPdfs(fileList) {
+    const pdfs = [...fileList].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) return;
+    if (!window.pdfjsLib) { sessionStatus.textContent = 'PDF reader failed to load — check your connection.'; return; }
+    for (const file of pdfs) {
+      try {
+        sessionStatus.textContent = 'Reading ' + file.name + '…';
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const baseName = file.name.replace(/\.pdf$/i, '');
+        for (let n = 1; n <= pdf.numPages; n++) {
+          sessionStatus.textContent = 'Reading ' + file.name + ' — page ' + n + ' of ' + pdf.numPages;
+          const page = await pdf.getPage(n);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          sessionPages.push({ id: nextPageId++, name: baseName, pageNum: n, dataUrl: canvas.toDataURL('image/jpeg', 0.85) });
+          renderSessionPages();
+        }
+        await idbSet('sessionPages', sessionPages);
+      } catch (e) {
+        console.error('PDF load failed', e);
+        sessionStatus.textContent = 'Could not read ' + file.name;
+        return;
+      }
+    }
+    sessionStatus.textContent = '';
+  }
+
+  ['dragenter', 'dragover'].forEach(evt => sessionPanel.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation();
+    sessionPanel.classList.add('dragover');
+  }));
+  sessionPanel.addEventListener('dragleave', e => {
+    if (!sessionPanel.contains(e.relatedTarget)) sessionPanel.classList.remove('dragover');
+  });
+  sessionPanel.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    sessionPanel.classList.remove('dragover');
+    dropZone.classList.remove('dragover');
+    addPdfs(e.dataTransfer.files);
+  });
+
+  let clearPagesArmed = false, clearPagesTimer = null;
+  clearPagesBtn.addEventListener('click', async () => {
+    if (!sessionPages.length) return;
+    if (!clearPagesArmed) {
+      clearPagesArmed = true;
+      clearPagesBtn.textContent = 'Sure?';
+      clearPagesTimer = setTimeout(() => { clearPagesArmed = false; clearPagesBtn.textContent = 'Clear'; }, 3000);
+      return;
+    }
+    clearTimeout(clearPagesTimer);
+    clearPagesArmed = false;
+    clearPagesBtn.textContent = 'Clear';
+    sessionPages = [];
+    renderSessionPages();
+    await idbSet('sessionPages', sessionPages);
+  });
+
+  /* click the background to return to the main screen */
+  pageStage.addEventListener('click', e => { if (e.target === pageStage) pageStage.classList.remove('open'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') pageStage.classList.remove('open'); });
+
+  (async function initSessionPages() {
+    const saved = await idbGet('sessionPages');
+    if (Array.isArray(saved)) {
+      sessionPages = saved;
+      nextPageId = Math.max(0, ...saved.map(x => x.id || 0)) + 1;
+    }
+    renderSessionPages();
+  })();
+
+  /* ---------- Game board ---------- */
+  const boardFrame = document.getElementById('boardFrame');
+  const boardStage = document.getElementById('boardStage');
+  const boardHint = document.getElementById('boardHint');
+  const loadBoardInput = document.getElementById('loadBoardInput');
+  const loadBoardLabel = document.getElementById('loadBoardLabel');
+  const saveBoardBtn = document.getElementById('saveBoard');
+  const clearBoardBtn = document.getElementById('clearBoard');
+  const DATA_IMG = /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+\/=]+$/i;
+
+  let boardImage = null;      // { dataUrl, ratio }
+  let sprites = [];           // { id, dataUrl, x, y, w, z }  (x, y, w are fractions of the board)
+  let nextSpriteId = 1;
+  let spriteZ = 1;
+  let boardImageDirty = false;
+  let boardSaveTimer = null;
+
+  const clampNum = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+
+  function fitBoardStage() {
+    const fw = boardFrame.clientWidth, fh = boardFrame.clientHeight;
+    if (!fw || !fh) return;
+    const ratio = boardImage ? boardImage.ratio : 16 / 9;
+    let w = fw, h = fw / ratio;
+    if (h > fh) { h = fh; w = fh * ratio; }
+    boardStage.style.width = w + 'px';
+    boardStage.style.height = h + 'px';
+  }
+  if (window.ResizeObserver) new ResizeObserver(fitBoardStage).observe(boardFrame);
+  window.addEventListener('resize', fitBoardStage);
+
+  function queueBoardSave(imageChanged) {
+    if (imageChanged) boardImageDirty = true;
+    clearTimeout(boardSaveTimer);
+    boardSaveTimer = setTimeout(async () => {
+      if (boardImageDirty) { await idbSet('boardImage', boardImage); boardImageDirty = false; }
+      await idbSet('boardSprites', sprites);
+    }, 400);
+  }
+
+  function placeSprite(el, s) {
+    el.style.left = (s.x * 100) + '%';
+    el.style.top = (s.y * 100) + '%';
+    el.style.width = (s.w * 100) + '%';
+    el.style.zIndex = s.z;
+  }
+
+  function buildSprite(s) {
+    const el = document.createElement('div');
+    el.className = 'sprite';
+    placeSprite(el, s);
+
+    const img = document.createElement('img');
+    img.src = s.dataUrl;
+    img.alt = '';
+    img.draggable = false;
+
+    const xBtn = document.createElement('button');
+    xBtn.className = 'sprite-x';
+    xBtn.type = 'button';
+    xBtn.textContent = '×';
+    xBtn.addEventListener('pointerdown', e => e.stopPropagation());
+    xBtn.addEventListener('click', () => {
+      if (!isOwner) return;
+      sprites = sprites.filter(x => x.id !== s.id);
+      el.remove();
+      queueBoardSave();
+    });
+
+    const handle = document.createElement('div');
+    handle.className = 'sprite-handle';
+
+    el.appendChild(img);
+    el.appendChild(xBtn);
+    el.appendChild(handle);
+
+    /* move */
+    el.addEventListener('pointerdown', e => {
+      if (!isOwner || e.target === handle || e.target === xBtn) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      s.z = ++spriteZ;
+      el.style.zIndex = s.z;
+      el.classList.add('dragging');
+      const rect = boardStage.getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY, ox = s.x, oy = s.y;
+      const move = ev => {
+        s.x = clampNum(ox + (ev.clientX - sx) / rect.width, 0, 1 - s.w);
+        s.y = clampNum(oy + (ev.clientY - sy) / rect.height, 0, 1 - el.offsetHeight / rect.height);
+        el.style.left = (s.x * 100) + '%';
+        el.style.top = (s.y * 100) + '%';
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+        el.classList.remove('dragging');
+        queueBoardSave();
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    });
+
+    /* resize (keeps the sprite's proportions) */
+    handle.addEventListener('pointerdown', e => {
+      if (!isOwner) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handle.setPointerCapture(e.pointerId);
+      const rect = boardStage.getBoundingClientRect();
+      const sx = e.clientX, ow = s.w;
+      const move = ev => {
+        s.w = clampNum(ow + (ev.clientX - sx) / rect.width, 0.02, 0.7);
+        el.style.width = (s.w * 100) + '%';
+      };
+      const up = () => {
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.removeEventListener('pointercancel', up);
+        queueBoardSave();
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      handle.addEventListener('pointercancel', up);
+    });
+
+    boardStage.appendChild(el);
+  }
+
+  function renderBoard() {
+    boardStage.style.backgroundImage = boardImage ? 'url("' + boardImage.dataUrl + '")' : 'none';
+    boardStage.classList.toggle('has-image', !!boardImage);
+    boardHint.style.display = boardImage ? 'none' : 'flex';
+    boardStage.querySelectorAll('.sprite').forEach(n => n.remove());
+    sprites.forEach(buildSprite);
+    fitBoardStage();
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  function imageSize(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve({ w: im.naturalWidth, h: im.naturalHeight });
+      im.onerror = reject;
+      im.src = dataUrl;
+    });
+  }
+
+  async function setBoardImage(file) {
+    const dataUrl = await readFileAsDataURL(file);
+    const size = await imageSize(dataUrl);
+    boardImage = { dataUrl, ratio: size.w / size.h };
+    renderBoard();
+    queueBoardSave(true);
+  }
+
+  async function addSprite(file, cx, cy, n) {
+    const dataUrl = await readFileAsDataURL(file);
+    const size = await imageSize(dataUrl);
+    const rect = boardStage.getBoundingClientRect();
+    const w = 0.08;
+    const hFrac = (w * rect.width * size.h / size.w) / rect.height;
+    const x = clampNum((cx - rect.left) / rect.width - w / 2 + n * 0.03, 0, 1 - w);
+    const y = clampNum((cy - rect.top) / rect.height - hFrac / 2 + n * 0.03, 0, 1 - hFrac);
+    sprites.push({ id: nextSpriteId++, dataUrl, x, y, w, z: ++spriteZ });
+    renderBoard();
+    queueBoardSave();
+  }
+
+  boardFrame.addEventListener('dragover', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (isOwner) boardFrame.classList.add('dragover');
+  });
+  boardFrame.addEventListener('dragleave', e => {
+    if (!boardFrame.contains(e.relatedTarget)) boardFrame.classList.remove('dragover');
+  });
+  boardFrame.addEventListener('drop', async e => {
+    e.preventDefault(); e.stopPropagation();
+    boardFrame.classList.remove('dragover');
+    dropZone.classList.remove('dragover');
+    if (!isOwner) return;
+    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+    let n = 0;
+    for (const f of files) {
+      try {
+        if (f.type === 'image/gif') await addSprite(f, e.clientX, e.clientY, n++);
+        else await setBoardImage(f);
+      } catch (err) { console.error('board drop failed', err); }
+    }
+  });
+
+  /* Save / Load / Clear */
+  function flash(el, text, original) {
+    el.textContent = text;
+    setTimeout(() => { el.textContent = original; }, 1800);
+  }
+
+  saveBoardBtn.addEventListener('click', () => {
+    const payload = { app: 'dm-table-board', version: 1, image: boardImage, sprites };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'board-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flash(saveBoardBtn, 'Saved ✓', 'Save Board');
+  });
+
+  function cleanBoardData(data) {
+    const img = data && data.image && DATA_IMG.test(data.image.dataUrl || '') && data.image.ratio > 0
+      ? { dataUrl: data.image.dataUrl, ratio: Number(data.image.ratio) } : null;
+    const list = (data && Array.isArray(data.sprites) ? data.sprites : [])
+      .filter(t => t && DATA_IMG.test(t.dataUrl || '') && isFinite(t.x) && isFinite(t.y) && isFinite(t.w))
+      .map((t, i) => ({ id: i + 1, dataUrl: t.dataUrl, x: +t.x, y: +t.y, w: clampNum(+t.w, 0.02, 0.7), z: isFinite(t.z) ? +t.z : i + 1 }));
+    return { img, list };
+  }
+
+  function applyBoardData(img, list) {
+    boardImage = img;
+    sprites = list;
+    nextSpriteId = sprites.length + 1;
+    spriteZ = Math.max(1, ...sprites.map(t => t.z));
+    renderBoard();
+  }
+
+  loadBoardInput.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    loadBoardInput.value = '';
+    if (!file || !isOwner) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!data || data.app !== 'dm-table-board') throw new Error('not a board file');
+      const { img, list } = cleanBoardData(data);
+      applyBoardData(img, list);
+      queueBoardSave(true);
+      flash(loadBoardLabel, 'Loaded ✓', 'Load Board');
+    } catch (err) {
+      console.error('load board failed', err);
+      flash(loadBoardLabel, 'Invalid file', 'Load Board');
+    }
+  });
+
+  let clearBoardArmed = false, clearBoardTimer = null;
+  clearBoardBtn.addEventListener('click', () => {
+    if (!isOwner || (!boardImage && !sprites.length)) return;
+    if (!clearBoardArmed) {
+      clearBoardArmed = true;
+      clearBoardBtn.textContent = 'Click again to confirm';
+      clearBoardTimer = setTimeout(() => { clearBoardArmed = false; clearBoardBtn.textContent = 'Clear board'; }, 3000);
+      return;
+    }
+    clearTimeout(clearBoardTimer);
+    clearBoardArmed = false;
+    clearBoardBtn.textContent = 'Clear board';
+    applyBoardData(null, []);
+    queueBoardSave(true);
+  });
+
+  (async function initBoard() {
+    const img = await idbGet('boardImage');
+    const list = await idbGet('boardSprites');
+    const cleaned = cleanBoardData({ image: img, sprites: list });
+    applyBoardData(cleaned.img, cleaned.list);
+  })();
+
+  /* ---------- Shared-table capabilities: owner controls vs guest view ---------- */
+  function applyRoleUI() {
+    document.getElementById('roleBadge').textContent = isOwner ? 'Game Master' : 'Player view';
+    document.body.classList.toggle('has-sessions', isOwner);
+    document.body.classList.toggle('is-guest', !isOwner);
+    document.getElementById('tabsNav').style.display = isOwner ? 'flex' : 'none';
+    document.getElementById('playersToolbar').style.display = 'none';
+    if (!isOwner) {
+      showTab('table');
+      tableToolbar.querySelectorAll('.file-btn, #revealAll, #hideAll, #shuffle, #clearAll')
+        .forEach(el => el.style.display = 'none');
+      document.getElementById('dropZoneText').textContent =
+        'Waiting for the Game Master to bring cards to the table.';
+    }
+  }
+
+  (async function initShared() {
+    if (!window.claude || !window.claude.use) { renderCards(); return; }
+    try {
+      const user = await window.claude.use('user');
+      if (user) isOwner = user.isOwner ? user.isOwner() : true;
+    } catch (e) { /* keep default */ }
+    applyRoleUI();
+    renderCards();
+
+    try { artifactCap = await window.claude.use('artifact'); } catch (e) { artifactCap = null; }
+    try { roomCap = await window.claude.use('room'); } catch (e) { roomCap = null; }
+  })();
+</script>
+</body>
+</html>
